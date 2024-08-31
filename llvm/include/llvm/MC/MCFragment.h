@@ -43,6 +43,7 @@ public:
     FT_DwarfFrame,
     FT_LEB,
     FT_BoundaryAlign,
+    FT_AlignSkew,
     FT_SymbolId,
     FT_CVInlineLines,
     FT_CVDefRange,
@@ -580,6 +581,8 @@ public:
 class MCBoundaryAlignFragment : public MCFragment {
   /// The alignment requirement of the branch to be aligned.
   Align AlignBoundary;
+  /// The skew to apply to the alignment.
+  uint64_t AlignSkew;
   /// The last fragment in the set of fragments to be aligned.
   const MCFragment *LastFragment = nullptr;
   /// The size of the fragment.  The size is lazily set during relaxation, and
@@ -590,9 +593,9 @@ class MCBoundaryAlignFragment : public MCFragment {
   const MCSubtargetInfo &STI;
 
 public:
-  MCBoundaryAlignFragment(Align AlignBoundary, const MCSubtargetInfo &STI,
+  MCBoundaryAlignFragment(Align AlignBoundary, uint64_t AlignSkew, const MCSubtargetInfo &STI,
                           MCSection *Sec = nullptr)
-      : MCFragment(FT_BoundaryAlign, false, Sec), AlignBoundary(AlignBoundary),
+      : MCFragment(FT_BoundaryAlign, false, Sec), AlignBoundary(AlignBoundary), AlignSkew(AlignSkew),
         STI(STI) {}
 
   uint64_t getSize() const { return Size; }
@@ -600,6 +603,9 @@ public:
 
   Align getAlignment() const { return AlignBoundary; }
   void setAlignment(Align Value) { AlignBoundary = Value; }
+
+  uint64_t getAlignSkew() const { return AlignSkew; }
+  void setAlignSkew(uint64_t Value) { AlignSkew = Value; }
 
   const MCFragment *getLastFragment() const { return LastFragment; }
   void setLastFragment(const MCFragment *F) {

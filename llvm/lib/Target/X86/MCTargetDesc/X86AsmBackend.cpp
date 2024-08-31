@@ -85,6 +85,14 @@ cl::opt<unsigned> X86AlignBranchBoundary(
         "against the boundary of specified size. The default value 0 does not "
         "align branches."));
 
+cl::opt<uint64_t> X86AlignSkew(
+    "x86-align-skew", cl::init(0),
+    cl::desc(
+        "The amount of offset to add after aligning branches. For example, "
+        "if the 'AlignBranchBoundary' is 64 and the 'AlignSkew' is 32, the "
+        "PC[5] of the branch will be set to 1 if it isn't already. To make "
+        "PC[5] to be 0, the 'AlignSkew' should be 0. The default value is 0."));
+
 cl::opt<X86AlignBranchKind, true, cl::parser<std::string>> X86AlignBranch(
     "x86-align-branch",
     cl::desc(
@@ -122,6 +130,7 @@ class X86AsmBackend : public MCAsmBackend {
   std::unique_ptr<const MCInstrInfo> MCII;
   X86AlignBranchKind AlignBranchType;
   Align AlignBoundary;
+  uint64_t AlignSkew;
   unsigned TargetPrefixMax = 0;
 
   MCInst PrevInst;
@@ -154,6 +163,8 @@ public:
       AlignBoundary = assumeAligned(X86AlignBranchBoundary);
     if (X86AlignBranch.getNumOccurrences())
       AlignBranchType = X86AlignBranchKindLoc;
+    if (X86AlignSkew.getNumOccurrences())
+      AlignSkew = X86AlignSkew;
     if (X86PadMaxPrefixSize.getNumOccurrences())
       TargetPrefixMax = X86PadMaxPrefixSize;
   }
@@ -552,7 +563,7 @@ void X86AsmBackend::emitInstructionBegin(MCObjectStreamer &OS,
                           isFirstMacroFusibleInst(Inst, *MCII))) {
     // If we meet a unfused branch or the first instuction in a fusiable pair,
     // insert a BoundaryAlign fragment.
-    OS.insert(PendingBA = new MCBoundaryAlignFragment(AlignBoundary, STI));
+    OS.insert(PendingBA = new MCBoundaryAlignFragment(AlignBoundary, AlignSkew, STI));
   }
 }
 

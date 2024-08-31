@@ -1083,10 +1083,16 @@ static bool isAgainstBoundary(uint64_t StartAddr, uint64_t Size,
 /// \param Size size of the fused/unfused branch.
 /// \param BoundaryAlignment alignment requirement of the branch.
 /// \returns true if the branch needs padding.
-static bool needPadding(uint64_t StartAddr, uint64_t Size,
-                        Align BoundaryAlignment) {
-  return mayCrossBoundary(StartAddr, Size, BoundaryAlignment) ||
-         isAgainstBoundary(StartAddr, Size, BoundaryAlignment);
+static bool needPadding(uint64_t EndAddr, Align BoundaryAlignment, uint64_t Skew) {
+  uint64_t need_padding;
+  uint64_t Alignment_value;
+  uint64_t bit_mask;
+
+  Alignment_value = BoundaryAlignment.value();
+  bit_mask = Alignment_value / 2;
+  need_padding = bit_mask & EndAddr;
+  need_padding = Skew ^ need_padding;
+  return (need_padding != 0);
 }
 
 bool MCAssembler::relaxBoundaryAlign(MCAsmLayout &Layout,
@@ -1096,15 +1102,24 @@ bool MCAssembler::relaxBoundaryAlign(MCAsmLayout &Layout,
   if (!BF.getLastFragment())
     return false;
 
+  // Start address of the branch instruction.
   uint64_t AlignedOffset = Layout.getFragmentOffset(&BF);
+
+  // Calculate the size of the branch instruction.
   uint64_t AlignedSize = 0;
   for (const MCFragment *F = BF.getLastFragment(); F != &BF;
        F = F->getPrevNode())
     AlignedSize += computeFragmentSize(Layout, *F);
 
+  // Calculate the last byte address of the branch instruction
+  uint64_t EndAddr = AlignedOffset + AlignedSize - 1;
+
   Align BoundaryAlignment = BF.getAlignment();
-  uint64_t NewSize = needPadding(AlignedOffset, AlignedSize, BoundaryAlignment)
-                         ? offsetToAlignment(AlignedOffset, BoundaryAlignment)
+  uint64_t AlignSkew = BF.getAlignSkew();
+
+  // Calculate the amount padding needed to align the branch.
+  uint64_t NewSize = needPadding(EndAddr, BoundaryAlignment, AlignSkew)
+                         ? offsetToAlignment(EndAddr, BoundaryAlignment, AlignSkew)
                          : 0U;
   if (NewSize == BF.getSize())
     return false;

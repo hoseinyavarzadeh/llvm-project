@@ -198,6 +198,11 @@ inline uint64_t offsetToAlignment(uint64_t Value, Align Alignment) {
   return alignTo(Value, Alignment) - Value;
 }
 
+/// Half&Half related offsetToAlignment function.
+inline uint64_t offsetToAlignment(uint64_t Value, Align Alignment, uint64_t Skew) {
+  return alignTo(Value, Alignment, Skew) - Value;
+}
+
 /// Returns the necessary adjustment for aligning `Addr` to `Alignment`
 /// bytes, rounding up.
 inline uint64_t offsetToAlignedAddr(const void *Addr, Align Alignment) {

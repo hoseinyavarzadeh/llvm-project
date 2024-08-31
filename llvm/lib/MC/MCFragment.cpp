@@ -304,6 +304,9 @@ void MCFragment::destroy() {
     case FT_BoundaryAlign:
       delete cast<MCBoundaryAlignFragment>(this);
       return;
+    case FT_AlignSkew:
+      delete cast<MCBoundaryAlignFragment>(this);
+      return;
     case FT_SymbolId:
       delete cast<MCSymbolIdFragment>(this);
       return;
@@ -355,6 +358,7 @@ LLVM_DUMP_METHOD void MCFragment::dump() const {
   case MCFragment::FT_DwarfFrame: OS << "MCDwarfCallFrameFragment"; break;
   case MCFragment::FT_LEB:   OS << "MCLEBFragment"; break;
   case MCFragment::FT_BoundaryAlign: OS<<"MCBoundaryAlignFragment"; break;
+  case MCFragment::FT_AlignSkew: OS<<"MCBoundaryAlignFragment"; break;
   case MCFragment::FT_SymbolId:    OS << "MCSymbolIdFragment"; break;
   case MCFragment::FT_CVInlineLines: OS << "MCCVInlineLineTableFragment"; break;
   case MCFragment::FT_CVDefRange: OS << "MCCVDefRangeTableFragment"; break;
