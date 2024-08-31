@@ -93,6 +93,12 @@ cl::opt<uint64_t> X86AlignSkew(
         "PC[5] of the branch will be set to 1 if it isn't already. To make "
         "PC[5] to be 0, the 'AlignSkew' should be 0. The default value is 0."));
 
+cl::opt<uint64_t> X86BranchBeforeNops(
+    "x86-branch-before-nops", cl::init(17),
+    cl::desc(
+        "This option is used to control the emission of jump instruction"
+        " before nops. The default value is 17."));
+
 cl::opt<X86AlignBranchKind, true, cl::parser<std::string>> X86AlignBranch(
     "x86-align-branch",
     cl::desc(
@@ -131,6 +137,7 @@ class X86AsmBackend : public MCAsmBackend {
   X86AlignBranchKind AlignBranchType;
   Align AlignBoundary;
   uint64_t AlignSkew;
+  uint64_t BranchBeforeNops;
   unsigned TargetPrefixMax = 0;
 
   MCInst PrevInst;
@@ -165,6 +172,7 @@ public:
       AlignBranchType = X86AlignBranchKindLoc;
     if (X86AlignSkew.getNumOccurrences())
       AlignSkew = X86AlignSkew;
+    BranchBeforeNops = X86BranchBeforeNops;
     if (X86PadMaxPrefixSize.getNumOccurrences())
       TargetPrefixMax = X86PadMaxPrefixSize;
   }
@@ -217,6 +225,9 @@ public:
   unsigned getMaximumNopSize(const MCSubtargetInfo &STI) const override;
 
   bool writeNopData(raw_ostream &OS, uint64_t Count,
+                    const MCSubtargetInfo *STI) const override;
+
+  bool writeNopJmpData(raw_ostream &OS, uint64_t Count,
                     const MCSubtargetInfo *STI) const override;
 };
 } // end anonymous namespace
@@ -1057,6 +1068,84 @@ bool X86AsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,
       OS.write(Nops[Rest - 1], Rest);
     Count -= ThisNopLength;
   } while (Count != 0);
+
+  return true;
+}
+
+/// Write a sequence of optimal nops to the output, covering \p Count
+/// bytes with a jmp at the begining of the sequence to the end of if
+/// \return - true on success, false on failure
+bool X86AsmBackend::writeNopJmpData(raw_ostream &OS, uint64_t Count,
+                                 const MCSubtargetInfo *STI) const {
+  
+  // We don't want jump if nops are not that many
+  if (Count < BranchBeforeNops)
+    return writeNopData(OS, Count, STI);
+
+  static const char Nops32Bit[10][11] = {
+      // nop
+      "\x90",
+      // xchg %ax,%ax
+      "\x66\x90",
+      // nopl (%[re]ax)
+      "\x0f\x1f\x00",
+      // nopl 0(%[re]ax)
+      "\x0f\x1f\x40\x00",
+      // nopl 0(%[re]ax,%[re]ax,1)
+      "\x0f\x1f\x44\x00\x00",
+      // nopw 0(%[re]ax,%[re]ax,1)
+      "\x66\x0f\x1f\x44\x00\x00",
+      // nopl 0L(%[re]ax)
+      "\x0f\x1f\x80\x00\x00\x00\x00",
+      // nopl 0L(%[re]ax,%[re]ax,1)
+      "\x0f\x1f\x84\x00\x00\x00\x00\x00",
+      // nopw 0L(%[re]ax,%[re]ax,1)
+      "\x66\x0f\x1f\x84\x00\x00\x00\x00\x00",
+      // nopw %cs:0L(%[re]ax,%[re]ax,1)
+      "\x66\x2e\x0f\x1f\x84\x00\x00\x00\x00\x00",
+  };
+
+  // 16-bit mode uses different nop patterns than 32-bit.
+  static const char Nops16Bit[4][11] = {
+      // nop
+      "\x90",
+      // xchg %eax,%eax
+      "\x66\x90",
+      // lea 0(%si),%si
+      "\x8d\x74\x00",
+      // lea 0w(%si),%si
+      "\x8d\xb4\x00\x00",
+  };
+
+  const char(*Nops)[11] =
+      STI->hasFeature(X86::Is16Bit) ? Nops16Bit : Nops32Bit;
+
+  uint64_t MaxNopLength = (uint64_t)getMaximumNopSize(*STI);
+
+  uint64_t NopCount = Count;
+  if (Count > 2) {  
+    // Emit jmp to the end of the nops
+    OS << "\xeb";
+    // since the jmp instruction itself is 2-byte instruction
+    // we need to jump over count-2 bytes.
+    unsigned char offset = (unsigned char) (Count - 2);
+    OS << offset; // format_hex(Count - 2, 4, true)
+
+    NopCount = Count - 2;
+  }
+
+  // Emit as many MaxNopLength NOPs as needed, then emit a NOP of the remaining
+  // length.
+  do {
+    const uint8_t ThisNopLength = (uint8_t) std::min(NopCount, MaxNopLength);
+    const uint8_t Prefixes = ThisNopLength <= 10 ? 0 : ThisNopLength - 10;
+    for (uint8_t i = 0; i < Prefixes; i++)
+      OS << '\x66';
+    const uint8_t Rest = ThisNopLength - Prefixes;
+    if (Rest != 0)
+      OS.write(Nops[Rest - 1], Rest);
+    NopCount -= ThisNopLength;
+  } while (NopCount != 0);
 
   return true;
 }

@@ -71,6 +71,11 @@ public:
 
   bool writeNopData(raw_ostream &OS, uint64_t Count,
                     const MCSubtargetInfo *STI) const override;
+
+  bool writeNopJmpData(raw_ostream &OS, uint64_t Count,
+                    const MCSubtargetInfo *STI) const override {
+    return false;
+  }
 };
 
 bool LanaiAsmBackend::writeNopData(raw_ostream &OS, uint64_t Count,

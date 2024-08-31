@@ -505,12 +505,12 @@ void MCAssembler::writeFragmentPadding(raw_ostream &OS,
       // ----------------------------
       //        ^-------------------^   <- TotalLength
       unsigned DistanceToBoundary = TotalLength - getBundleAlignSize();
-      if (!getBackend().writeNopData(OS, DistanceToBoundary, STI))
+      if (!getBackend().writeNopJmpData(OS, DistanceToBoundary, STI))
         report_fatal_error("unable to write NOP sequence of " +
                            Twine(DistanceToBoundary) + " bytes");
       BundlePadding -= DistanceToBoundary;
     }
-    if (!getBackend().writeNopData(OS, BundlePadding, STI))
+    if (!getBackend().writeNopJmpData(OS, BundlePadding, STI))
       report_fatal_error("unable to write NOP sequence of " +
                          Twine(BundlePadding) + " bytes");
   }
@@ -556,7 +556,7 @@ static void writeFragment(raw_ostream &OS, const MCAssembler &Asm,
     // bytes left to fill use the Value and ValueSize to fill the rest.
     // If we are aligning with nops, ask that target to emit the right data.
     if (AF.hasEmitNops()) {
-      if (!Asm.getBackend().writeNopData(OS, Count, AF.getSubtargetInfo()))
+      if (!Asm.getBackend().writeNopJmpData(OS, Count, AF.getSubtargetInfo()))
         report_fatal_error("unable to write nop sequence of " +
                           Twine(Count) + " bytes");
       break;
@@ -661,7 +661,7 @@ static void writeFragment(raw_ostream &OS, const MCAssembler &Asm,
       uint64_t NumBytesToEmit =
           (uint64_t)std::min(NumBytes, ControlledNopLength);
       assert(NumBytesToEmit && "try to emit empty NOP instruction");
-      if (!Asm.getBackend().writeNopData(OS, NumBytesToEmit,
+      if (!Asm.getBackend().writeNopJmpData(OS, NumBytesToEmit,
                                          NF.getSubtargetInfo())) {
         report_fatal_error("unable to write nop sequence of the remaining " +
                            Twine(NumBytesToEmit) + " bytes");
@@ -680,7 +680,7 @@ static void writeFragment(raw_ostream &OS, const MCAssembler &Asm,
 
   case MCFragment::FT_BoundaryAlign: {
     const MCBoundaryAlignFragment &BF = cast<MCBoundaryAlignFragment>(F);
-    if (!Asm.getBackend().writeNopData(OS, FragmentSize, BF.getSubtargetInfo()))
+    if (!Asm.getBackend().writeNopJmpData(OS, FragmentSize, BF.getSubtargetInfo()))
       report_fatal_error("unable to write nop sequence of " +
                          Twine(FragmentSize) + " bytes");
     break;

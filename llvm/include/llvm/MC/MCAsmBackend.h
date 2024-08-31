@@ -224,6 +224,9 @@ public:
   virtual bool writeNopData(raw_ostream &OS, uint64_t Count,
                             const MCSubtargetInfo *STI) const = 0;
 
+  virtual bool writeNopJmpData(raw_ostream &OS, uint64_t Count,
+                            const MCSubtargetInfo *STI) const = 0;
+
   /// Give backend an opportunity to finish layout after relaxation
   virtual void finishLayout(MCAssembler const &Asm,
                             MCAsmLayout &Layout) const {}

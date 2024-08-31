@@ -333,6 +333,10 @@ namespace {
 
       return true;
     }
+    bool writeNopJmpData(raw_ostream &OS, uint64_t Count,
+                    const MCSubtargetInfo *STI) const override {
+      return false;
+    }
   };
 
   class ELFSparcAsmBackend : public SparcAsmBackend {
