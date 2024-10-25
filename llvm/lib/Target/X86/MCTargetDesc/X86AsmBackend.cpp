@@ -181,7 +181,8 @@ public:
   bool allowEnhancedRelaxation() const override;
   void emitInstructionBegin(MCObjectStreamer &OS, const MCInst &Inst,
                             const MCSubtargetInfo &STI) override;
-  void emitInstructionEnd(MCObjectStreamer &OS, const MCInst &Inst) override;
+  void emitInstructionEnd(MCObjectStreamer &OS, const MCInst &Inst, 
+                            const MCSubtargetInfo &STI) override;
 
   unsigned getNumFixupKinds() const override {
     return X86::NumTargetFixupKinds;
@@ -534,7 +535,7 @@ bool X86AsmBackend::needAlign(const MCInst &Inst) const {
 }
 
 /// Insert BoundaryAlignFragment before instructions to align branches.
-void X86AsmBackend::emitInstructionBegin(MCObjectStreamer &OS,
+void X86AsmBackend::emitInstructionEnd(MCObjectStreamer &OS,
                                          const MCInst &Inst, const MCSubtargetInfo &STI) {
   CanPadInst = canPadInst(Inst, OS);
 
@@ -574,12 +575,12 @@ void X86AsmBackend::emitInstructionBegin(MCObjectStreamer &OS,
                           isFirstMacroFusibleInst(Inst, *MCII))) {
     // If we meet a unfused branch or the first instuction in a fusiable pair,
     // insert a BoundaryAlign fragment.
-    OS.insert(PendingBA = new MCBoundaryAlignFragment(AlignBoundary, AlignSkew, STI));
+    OS.insert(PendingBA = new MCBoundaryAlignFragment(BranchBeforeNops, AlignBoundary, AlignSkew, STI));
   }
 }
 
 /// Set the last fragment to be aligned for the BoundaryAlignFragment.
-void X86AsmBackend::emitInstructionEnd(MCObjectStreamer &OS, const MCInst &Inst) {
+void X86AsmBackend::emitInstructionBegin(MCObjectStreamer &OS, const MCInst &Inst, const MCSubtargetInfo &STI) {
   PrevInst = Inst;
   MCFragment *CF = OS.getCurrentFragment();
   PrevInstPosition = std::make_pair(CF, getSizeForInstFragment(CF));

@@ -427,7 +427,7 @@ void MCObjectStreamer::emitInstruction(const MCInst &Inst,
   }
   getAssembler().getBackend().emitInstructionBegin(*this, Inst, STI);
   emitInstructionImpl(Inst, STI);
-  getAssembler().getBackend().emitInstructionEnd(*this, Inst);
+  getAssembler().getBackend().emitInstructionEnd(*this, Inst, STI);
 }
 
 void MCObjectStreamer::emitInstructionImpl(const MCInst &Inst,

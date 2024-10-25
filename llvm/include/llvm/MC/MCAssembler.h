@@ -19,6 +19,7 @@
 #include "llvm/MC/MCDwarf.h"
 #include "llvm/MC/MCLinkerOptimizationHint.h"
 #include "llvm/MC/MCSymbol.h"
+#include "llvm/MC/MCSection.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/VersionTuple.h"
 #include <algorithm>
@@ -207,10 +208,10 @@ private:
 
   /// Perform relaxation on a single fragment - returns true if the fragment
   /// changes as a result of relaxation.
-  bool relaxFragment(MCAsmLayout &Layout, MCFragment &F);
+  bool relaxFragment(MCAsmLayout &Layout, MCFragment &F, MCSection &Sec, MCSection::iterator Curr);
   bool relaxInstruction(MCAsmLayout &Layout, MCRelaxableFragment &IF);
   bool relaxLEB(MCAsmLayout &Layout, MCLEBFragment &IF);
-  bool relaxBoundaryAlign(MCAsmLayout &Layout, MCBoundaryAlignFragment &BF);
+  bool relaxBoundaryAlign(MCAsmLayout &Layout, MCBoundaryAlignFragment &BF, MCSection &Sec, MCSection::iterator Curr);
   bool relaxDwarfLineAddr(MCAsmLayout &Layout, MCDwarfLineAddrFragment &DF);
   bool relaxDwarfCallFrameFragment(MCAsmLayout &Layout,
                                    MCDwarfCallFrameFragment &DF);

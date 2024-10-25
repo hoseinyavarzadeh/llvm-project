@@ -583,20 +583,25 @@ class MCBoundaryAlignFragment : public MCFragment {
   Align AlignBoundary;
   /// The skew to apply to the alignment.
   uint64_t AlignSkew;
+  uint64_t BranchBeforeNops;
   /// The last fragment in the set of fragments to be aligned.
   const MCFragment *LastFragment = nullptr;
   /// The size of the fragment.  The size is lazily set during relaxation, and
   /// is not meaningful before that.
   uint64_t Size = 0;
+  /// Flag to indicate whether the branch is fused.
+  bool Fused : 1;
+  /// Flag to indicate whether NOPs should be emitted.
+  bool EmitNops : 1;
 
   /// When emitting Nops some subtargets have specific nop encodings.
-  const MCSubtargetInfo &STI;
+  const MCSubtargetInfo *STI = nullptr;
 
 public:
-  MCBoundaryAlignFragment(Align AlignBoundary, uint64_t AlignSkew, const MCSubtargetInfo &STI,
-                          MCSection *Sec = nullptr)
-      : MCFragment(FT_BoundaryAlign, false, Sec), AlignBoundary(AlignBoundary), AlignSkew(AlignSkew),
-        STI(STI) {}
+  MCBoundaryAlignFragment(uint64_t BranchBeforeNops, Align AlignBoundary, uint64_t AlignSkew, 
+                          const MCSubtargetInfo &STI, bool EmitNops = false, MCSection *Sec = nullptr)
+      : MCFragment(FT_BoundaryAlign, false, Sec), BranchBeforeNops(BranchBeforeNops), AlignSkew(AlignSkew), AlignBoundary(AlignBoundary),
+        EmitNops(EmitNops), STI(&STI) {}
 
   uint64_t getSize() const { return Size; }
   void setSize(uint64_t Value) { Size = Value; }
@@ -607,13 +612,25 @@ public:
   uint64_t getAlignSkew() const { return AlignSkew; }
   void setAlignSkew(uint64_t Value) { AlignSkew = Value; }
 
+  uint64_t getBranchBeforeNops() const { return BranchBeforeNops; }
+
+  bool canEmitNops() const { return EmitNops; }
+
+  bool isFused() const { return Fused; }
+  void setFused(bool Value) { Fused = Value; }
+
+  void setEmitNops(bool Value, const MCSubtargetInfo *STI) {
+    EmitNops = Value;
+    // this->STI = STI;
+  }
+
   const MCFragment *getLastFragment() const { return LastFragment; }
   void setLastFragment(const MCFragment *F) {
     assert(!F || getParent() == F->getParent());
     LastFragment = F;
   }
 
-  const MCSubtargetInfo *getSubtargetInfo() const { return &STI; }
+  const MCSubtargetInfo *getSubtargetInfo() const { return STI; }
 
   static bool classof(const MCFragment *F) {
     return F->getKind() == MCFragment::FT_BoundaryAlign;

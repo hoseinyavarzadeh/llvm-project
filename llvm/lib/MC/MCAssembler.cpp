@@ -40,6 +40,7 @@
 #include <cstdint>
 #include <tuple>
 #include <utility>
+#include <iostream>
 
 using namespace llvm;
 
@@ -1083,44 +1084,103 @@ static bool isAgainstBoundary(uint64_t StartAddr, uint64_t Size,
 /// \param Size size of the fused/unfused branch.
 /// \param BoundaryAlignment alignment requirement of the branch.
 /// \returns true if the branch needs padding.
-static bool needPadding(uint64_t EndAddr, Align BoundaryAlignment, uint64_t Skew) {
+static bool needPadding(uint64_t StartAddr, Align BoundaryAlignment, uint64_t Skew) {
   uint64_t need_padding;
   uint64_t Alignment_value;
   uint64_t bit_mask;
 
   Alignment_value = BoundaryAlignment.value();
   bit_mask = Alignment_value / 2;
-  need_padding = bit_mask & EndAddr;
+  need_padding = bit_mask & StartAddr;
   need_padding = Skew ^ need_padding;
   return (need_padding != 0);
 }
 
 bool MCAssembler::relaxBoundaryAlign(MCAsmLayout &Layout,
-                                     MCBoundaryAlignFragment &BF) {
+                                     MCBoundaryAlignFragment &BF,
+                                     MCSection &Sec,
+                                     MCSection::iterator Curr) {
   // BoundaryAlignFragment that doesn't need to align any fragment should not be
   // relaxed.
-  if (!BF.getLastFragment())
-    return false;
 
-  // Start address of the branch instruction.
-  uint64_t AlignedOffset = Layout.getFragmentOffset(&BF);
+  uint64_t OldSize = 0;
+  uint64_t NewSize = 0;
+  
+  bool ShouldBreakForLoop = false;
+  for (MCSection::iterator I = Curr, IE = Sec.end(); I != IE; ++I) {
+      switch(I->getKind()) {
+        case MCFragment::FT_BoundaryAlign: {
+          MCBoundaryAlignFragment &BF_trash = *cast<MCBoundaryAlignFragment>(I);
+          if(BF_trash.canEmitNops()){
+            if(I == Curr){
+              continue;
+            }
+            /// Finding the required number of NOPs for the next conditional branch (BEGIN) 
+            std::cout <<"curr_addr:"<<Layout.getFragmentOffset(BF.getNextNode())<<"   ";
+            uint64_t AlignedOffset = Layout.getFragmentOffset(BF_trash.getNextNode());
+            uint64_t AlignedSize = 0;
+            const MCFragment *F = BF_trash.getNextNode();
+            // If the branch is unfused, it is emitted into one fragment, otherwise it is
+            // emitted into two fragments at most, the next MCBoundaryAlignFragment(if
+            // exists) also marks the end of the branch.
+            for (auto i = 0, N = BF_trash.isFused() ? 2 : 1;
+              i != N && !isa<MCBoundaryAlignFragment>(F); ++i, F = F->getNextNode()) {
+              AlignedSize += computeFragmentSize(Layout, *F);
+            }
+            std::cout <<"nxt_addr:"<<AlignedOffset<<"   AlignedSize:"<<AlignedSize<<"  ";
+            OldSize = BF.getSize();
+            uint64_t OldSize_next = BF_trash.getSize();
+            AlignedOffset = AlignedOffset - OldSize - OldSize_next;
+            std::cout <<"Oldsize_curr:"<<OldSize<<"   Oldsize_next:"<<OldSize_next<<"  nxt_addr_new:"<<AlignedOffset<<"  ";
+            Align BoundaryAlignment = BF.getAlignment();
+            uint64_t AlignSkew = BF.getAlignSkew();
+            uint64_t BranchBeforeNops = BF.getBranchBeforeNops();
+            NewSize = needPadding(AlignedOffset, BoundaryAlignment, AlignSkew)
+                      ? offsetToAlignment(AlignedOffset, BoundaryAlignment, AlignSkew)
+                      : 0U;
+             std::cout <<"NewSize:"<<NewSize<<"\n\n";
+            std::cout <<"current_address:"<<Layout.getFragmentOffset(BF.getNextNode())<<"   ";
+            std::cout <<"next_address:"<<Layout.getFragmentOffset(BF_trash.getNextNode())<<"   oldsize:"<<OldSize<<"   newsize:"<<NewSize<<"\n";
+            /// ------------------------------------------------------------------- (END)
+            ShouldBreakForLoop = true;
+            break;
+          }
+          break;
+        }
+        case MCFragment::FT_Align: {
+          ShouldBreakForLoop = true;
+        }
+        default: {
+          break;
+        }
+      }
+      if (ShouldBreakForLoop){
+        break;
+      }
+  }
 
-  // Calculate the size of the branch instruction.
-  uint64_t AlignedSize = 0;
-  for (const MCFragment *F = BF.getLastFragment(); F != &BF;
-       F = F->getPrevNode())
-    AlignedSize += computeFragmentSize(Layout, *F);
+  // if (!BF.getLastFragment())
+  //   return false;
 
-  // Calculate the last byte address of the branch instruction
-  uint64_t EndAddr = AlignedOffset + AlignedSize - 1;
+  // // Start address of the branch instruction.
+  // uint64_t AlignedOffset = Layout.getFragmentOffset(&BF);
 
-  Align BoundaryAlignment = BF.getAlignment();
-  uint64_t AlignSkew = BF.getAlignSkew();
+  // // Calculate the size of the branch instruction.
+  // uint64_t AlignedSize = 0;
+  // for (const MCFragment *F = BF.getLastFragment(); F != &BF;
+  //      F = F->getPrevNode())
+  //   AlignedSize += computeFragmentSize(Layout, *F);
 
-  // Calculate the amount padding needed to align the branch.
-  uint64_t NewSize = needPadding(EndAddr, BoundaryAlignment, AlignSkew)
-                         ? offsetToAlignment(EndAddr, BoundaryAlignment, AlignSkew)
-                         : 0U;
+  // // Calculate the last byte address of the branch instruction
+  // uint64_t EndAddr = AlignedOffset + AlignedSize - 1;
+
+  // Align BoundaryAlignment = BF.getAlignment();
+  // uint64_t AlignSkew = BF.getAlignSkew();
+
+  // // Calculate the amount padding needed to align the branch.
+  // uint64_t NewSize = needPadding(EndAddr, BoundaryAlignment, AlignSkew)
+  //                        ? offsetToAlignment(EndAddr, BoundaryAlignment, AlignSkew)
+  //                        : 0U;
   if (NewSize == BF.getSize())
     return false;
   BF.setSize(NewSize);
@@ -1208,7 +1268,7 @@ bool MCAssembler::relaxPseudoProbeAddr(MCAsmLayout &Layout,
   return OldSize != Data.size();
 }
 
-bool MCAssembler::relaxFragment(MCAsmLayout &Layout, MCFragment &F) {
+bool MCAssembler::relaxFragment(MCAsmLayout &Layout, MCFragment &F, MCSection &Sec, MCSection::iterator Curr) {
   switch(F.getKind()) {
   default:
     return false;
@@ -1224,7 +1284,7 @@ bool MCAssembler::relaxFragment(MCAsmLayout &Layout, MCFragment &F) {
   case MCFragment::FT_LEB:
     return relaxLEB(Layout, cast<MCLEBFragment>(F));
   case MCFragment::FT_BoundaryAlign:
-    return relaxBoundaryAlign(Layout, cast<MCBoundaryAlignFragment>(F));
+    return relaxBoundaryAlign(Layout, cast<MCBoundaryAlignFragment>(F), Sec, Curr);
   case MCFragment::FT_CVInlineLines:
     return relaxCVInlineLineTable(Layout, cast<MCCVInlineLineTableFragment>(F));
   case MCFragment::FT_CVDefRange:
@@ -1242,9 +1302,13 @@ bool MCAssembler::layoutSectionOnce(MCAsmLayout &Layout, MCSection &Sec) {
   MCFragment *FirstRelaxedFragment = nullptr;
 
   // Attempt to relax all the fragments in the section.
-  for (MCFragment &Frag : Sec) {
+  // for (MCFragment &Frag : Sec) {
     // Check if this is a fragment that needs relaxation.
-    bool RelaxedFrag = relaxFragment(Layout, Frag);
+  // MCSection::iterator I;
+  for (MCSection::iterator I = Sec.begin(), IE = Sec.end(); I != IE; ++I) {
+      
+    MCFragment &Frag = *cast<MCFragment>(I);
+    bool RelaxedFrag = relaxFragment(Layout, Frag, Sec, I);
     if (RelaxedFrag && !FirstRelaxedFragment)
       FirstRelaxedFragment = &Frag;
   }

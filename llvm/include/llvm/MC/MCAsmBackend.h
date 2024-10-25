@@ -67,7 +67,8 @@ public:
   /// before and after actually emitting the instruction.
   virtual void emitInstructionBegin(MCObjectStreamer &OS, const MCInst &Inst,
                                     const MCSubtargetInfo &STI) {}
-  virtual void emitInstructionEnd(MCObjectStreamer &OS, const MCInst &Inst) {}
+  virtual void emitInstructionEnd(MCObjectStreamer &OS, const MCInst &Inst,
+                                    const MCSubtargetInfo &STI) {}
 
   /// lifetime management
   virtual void reset() {}
